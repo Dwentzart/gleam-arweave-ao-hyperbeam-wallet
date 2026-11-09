@@ -27,6 +27,30 @@ export interface NetworkSettings {
 export const DEFAULT_HYPERBEAM_PEER_URLS: readonly string[] = ["https://state.forward.computer"];
 
 /**
+ * Public HyperBEAM nodes merged into the peer list on every settings read
+ * (runtime `peers.ts`), which AO reads fail over to when the active peer
+ * is down. Taken from on-chain location records (`Type: Location |
+ * Scheduler-Location`, `type: location`). Each answers `Access-Control-Allow-Origin: *`, so unlike
+ * DEFAULT_HYPERBEAM_PEER_URLS they stay out of `host_permissions`: a new
+ * host permission there disables the extension on update.
+ */
+export const COMMUNITY_HYPERBEAM_PEER_URLS: readonly string[] = [
+  "https://alpha.neo.zephyrdev.xyz",
+  "https://charlie.neo2.zephyrdev.xyz",
+  "https://hb.randao.net",
+  "https://hb.paralithmarkets.com",
+  "https://hyperbeam.tylerw.ai",
+  "https://hb.apus.network",
+  "https://hb.karakutu.xyz",
+  "https://mail.mystical.computer",
+  "https://tunnel.mystical.computer",
+  "https://market-1.mystical.computer",
+  "https://market-2.mystical.computer",
+  "https://market-3.mystical.computer",
+  "https://iloveao.online",
+];
+
+/**
  * HyperBEAM nodes that compute `arweave-scheduler@1.0` processes. A
  * gateway's own answer for these processes comes and goes: arweave.net
  * has been seen flipping between a balance and an HTML 404 for the same

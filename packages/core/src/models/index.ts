@@ -79,7 +79,7 @@ export type { HyperBeamPeer, NetworkSettings } from "./network";
 export { SITE_URL, SITE_ORIGIN, DEV_SITE_HOSTS } from "./site-origin";
 export { REPO_URL, STORE_REVIEWS_URL, releaseUrl, sitePageUrl } from "./site-links";
 export type { SitePage } from "./site-links";
-export { DEFAULT_BUNDLER_URL, DEFAULT_HYPERBEAM_PEER_URLS, L1_TOKEN_NODE_URLS, POINTS_API_URL, explorerUrlFor } from "./network";
+export { COMMUNITY_HYPERBEAM_PEER_URLS, DEFAULT_BUNDLER_URL, DEFAULT_HYPERBEAM_PEER_URLS, L1_TOKEN_NODE_URLS, POINTS_API_URL, explorerUrlFor } from "./network";
 export type { ThemePreference, ThemeSettings } from "./theme";
 export type { DisplayCurrency, DisplaySettings, FiatCurrency, HeaderStyle, HeadlineBalance, TokenCurrency, TokenRowDetail } from "./display";
 export {

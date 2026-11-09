@@ -440,6 +440,7 @@ export function NetworkPeersView({ runtime, onBack }: NetworkPeersViewProps) {
           <div className="pb-1 text-label font-semibold uppercase tracking-[0.04em] text-muted">
             {t("networkPeers.aoPeers")}
           </div>
+          <p className="pb-1 text-caption leading-relaxed text-faint">{t("networkPeers.peersHint")}</p>
           <div>
             {state.loading ? (
               <>
@@ -557,9 +558,6 @@ export function NetworkPeersView({ runtime, onBack }: NetworkPeersViewProps) {
               </>
             )}
           </div>
-          <p className="pt-2.5 text-caption leading-relaxed text-faint">
-            {t("networkPeers.peersHint")}
-          </p>
         </div>
       </div>
     </div>

@@ -66,6 +66,7 @@ import {
 } from "./dispatch/methods";
 import { dispatchSiteMessage } from "./dispatch/site";
 import { redeemSiteInvite } from "./points-invite";
+import { registerPeerDiscoveryAlarm, saveNetworkSettings } from "./peers";
 import { signSiteAttestation, siteAttestStatus } from "./points-attest";
 import type { Platform } from "./platform";
 import { userErrorMessage } from "@gleam/core/src/models/user-errors.ts";
@@ -239,6 +240,7 @@ export function createRuntime(platform: Platform): Runtime {
   // interval, independent of any popup being open — see reads.ts's own
   // doc comment on registerActivityPromotionAlarm.
   registerActivityPromotionAlarm(reads, platform.timer);
+  registerPeerDiscoveryAlarm(storage, platform.timer, async () => (await reads.getNetworkSettings()).gatewayUrl);
 
   const points = new PointsHandler({
     storage,
@@ -903,7 +905,7 @@ export function createRuntime(platform: Platform): Runtime {
 
     // settings
     getNetworkSettings: () => reads.getNetworkSettings(),
-    setNetworkSettings: (data) => storage.set("local:networkSettings", data),
+    setNetworkSettings: (data) => saveNetworkSettings(storage, data),
     getLockSettings: () => lifecycle.getLockSettings(),
     setLockSettings: (data) => lifecycle.setLockSettings(data),
     getThemePreference: () => lifecycle.getThemePreference(),

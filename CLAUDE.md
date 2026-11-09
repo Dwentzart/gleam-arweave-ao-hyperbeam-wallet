@@ -167,9 +167,13 @@ commit.gpgsign true`), so the key has to be loaded in `ssh-agent`.
 
 One signed tag `v<version>` releases the extension and both apps.
 
-1. Write `security/audits/v<version>.md` (`security/audits/TEMPLATE.md`).
-   The gate refuses to tag while any security-surface file changed after
-   the audited commit or a critical/high finding is open.
+1. Run `pnpm peers:refresh` and update `COMMUNITY_HYPERBEAM_PEER_URLS`
+   (`core/models/network.ts`) from what it prints. Installs refresh the
+   list daily on their own; the shipped list is what they start from.
+   Then write `security/audits/v<version>.md`
+   (`security/audits/TEMPLATE.md`). The gate refuses to tag while any
+   security-surface file changed after the audited commit or a
+   critical/high finding is open.
 2. `pnpm release:all <major|minor|patch>` sets one version in the
    extension, the mobile package, iOS and Android
    (`scripts/app-versions.mjs`), adds 1 to both build numbers, and opens

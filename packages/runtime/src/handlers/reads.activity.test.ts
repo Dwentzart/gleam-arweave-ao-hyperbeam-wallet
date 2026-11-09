@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import type { StoragePort } from "@gleam/core";
+import { COMMUNITY_HYPERBEAM_PEER_URLS, DEFAULT_HYPERBEAM_PEER_URLS } from "@gleam/core";
 import { ReadsHandler, ACTIVITY_PROMOTION_ALARM_NAME, registerActivityPromotionAlarm } from "./reads";
 
 function createFakeStorage(): StoragePort {
@@ -113,6 +114,33 @@ describe("ReadsHandler: getTokenBalances", () => {
     expect(balances).toHaveLength(1);
     expect(balances[0]).toMatchObject({ processId: AO, ticker: "AO", quantity: "7", source: "default" });
     expect(balances[0]?.available).not.toBe(false);
+  });
+
+  it("fails over to the next enabled peer when the active one is unreachable", async () => {
+    const storage = createFakeStorage();
+    const BACKUP = "https://backup.hyperbeam.test";
+    await storage.set("local:watchedProcessIds:addr1", [LEGACY]);
+    await storage.set("local:networkSettings", {
+      gatewayUrl: "https://arweave.net",
+      peers: [
+        { url: PEER, enabled: true },
+        { url: BACKUP, enabled: true },
+      ],
+      activePeerUrl: PEER,
+    });
+
+    globalThis.fetch = vi.fn(async (url: string) => {
+      if (url.includes("/graphql")) return graphqlNodes([{ id: LEGACY, tags: LEGACY_TAGS }]);
+      if (url.startsWith(PEER)) throw new TypeError("Failed to fetch");
+      return new Response("42");
+    }) as unknown as typeof fetch;
+
+    const balances = await new ReadsHandler(storage, undefined, noDiscovery).getTokenBalances({ address: "addr1" });
+
+    expect(balances.find((b) => b.processId === LEGACY)).toMatchObject({ quantity: "42" });
+    expect(globalThis.fetch).toHaveBeenCalledWith(`${BACKUP}/${LEGACY}~process@1.0/compute/balances/addr1`, {
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it("reads a legacy token's balance from the active peer when configured", async () => {
@@ -1360,12 +1388,12 @@ describe("ReadsHandler: getNetworkSettings", () => {
     const handler = new ReadsHandler(createFakeStorage());
     expect(await handler.getNetworkSettings()).toEqual({
       gatewayUrl: "https://arweave.net",
-      peers: [{ url: "https://state.forward.computer", enabled: true }],
+      peers: [...DEFAULT_HYPERBEAM_PEER_URLS, ...COMMUNITY_HYPERBEAM_PEER_URLS].map((url) => ({ url, enabled: true })),
       activePeerUrl: "https://state.forward.computer",
     });
   });
 
-  it("reflects previously stored network settings", async () => {
+  it("reflects previously stored network settings, with the community peers appended", async () => {
     const storage = createFakeStorage();
     const settings = {
       gatewayUrl: "https://arweave.net",
@@ -1375,7 +1403,44 @@ describe("ReadsHandler: getNetworkSettings", () => {
     await storage.set("local:networkSettings", settings);
 
     const handler = new ReadsHandler(storage);
-    expect(await handler.getNetworkSettings()).toEqual(settings);
+    const loaded = await handler.getNetworkSettings();
+    expect(loaded.activePeerUrl).toBe("https://hyperbeam.example.com");
+    expect(loaded.peers[0]).toEqual({ url: "https://hyperbeam.example.com", enabled: true });
+    expect(loaded.peers.map((peer) => peer.url)).toEqual(["https://hyperbeam.example.com", ...COMMUNITY_HYPERBEAM_PEER_URLS]);
+  });
+
+  it("keeps a community peer out once the user has removed it", async () => {
+    const storage = createFakeStorage();
+    const removed = COMMUNITY_HYPERBEAM_PEER_URLS[0]!;
+    await storage.set("local:dismissedPeers", [removed]);
+
+    const urls = (await new ReadsHandler(storage).getNetworkSettings()).peers.map((peer) => peer.url);
+    expect(urls).not.toContain(removed);
+    expect(urls).toContain(COMMUNITY_HYPERBEAM_PEER_URLS[1]);
+  });
+
+  it("never writes the merged peers back to storage", async () => {
+    const storage = createFakeStorage();
+    const settings = {
+      gatewayUrl: "https://arweave.net",
+      peers: [{ url: "https://state.forward.computer", enabled: true }],
+      activePeerUrl: "https://state.forward.computer",
+    };
+    await storage.set("local:networkSettings", settings);
+    const set = vi.spyOn(storage, "set");
+
+    await new ReadsHandler(storage).getNetworkSettings();
+    expect(set).not.toHaveBeenCalled();
+  });
+
+  it("appends discovered peers, skipping ones the user dismissed", async () => {
+    const storage = createFakeStorage();
+    await storage.set("local:discoveredPeers", { at: 1, urls: ["https://new-a.test", "https://new-b.test"] });
+    await storage.set("local:dismissedPeers", ["https://new-b.test"]);
+
+    const urls = (await new ReadsHandler(storage).getNetworkSettings()).peers.map((peer) => peer.url);
+    expect(urls).toContain("https://new-a.test");
+    expect(urls).not.toContain("https://new-b.test");
   });
 
   it("drops a malformed stored record back to the default (untrusted storage)", async () => {
@@ -1384,7 +1449,7 @@ describe("ReadsHandler: getNetworkSettings", () => {
     const handler = new ReadsHandler(storage);
     expect(await handler.getNetworkSettings()).toEqual({
       gatewayUrl: "https://arweave.net",
-      peers: [{ url: "https://state.forward.computer", enabled: true }],
+      peers: [...DEFAULT_HYPERBEAM_PEER_URLS, ...COMMUNITY_HYPERBEAM_PEER_URLS].map((url) => ({ url, enabled: true })),
       activePeerUrl: "https://state.forward.computer",
     });
   });

@@ -20,3 +20,5 @@ export {
   readCollectibleTransfer,
   COLLECTIBLE_TRANSFER_QUANTITY,
 } from "./collectible-transfer";
+export { discoverHyperBeamPeers, normalizePeerUrl } from "./peer-discovery";
+export type { DiscoverHyperBeamPeersOptions } from "./peer-discovery";

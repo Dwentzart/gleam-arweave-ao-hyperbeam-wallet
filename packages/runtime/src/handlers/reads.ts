@@ -7,7 +7,9 @@ import {
   readTokenSwapHeight,
   readTokenBalance,
   type DiscoverTokensOptions,
+  type ReadTokenBalanceOptions,
 } from "@gleam/core/src/ao/index.ts";
+import { peerFailoverOrder, withPeerFailover } from "@gleam/core/src/ao/peer-failover.ts";
 import { getBalance as getArBalance } from "@gleam/core/src/arweave/balance.ts";
 import {
   queryActivityTransactions,
@@ -36,6 +38,7 @@ import {
   type HistoricalPricePoint,
 } from "@gleam/core/src/pricing/index.ts";
 import { DEFAULT_HYPERBEAM_PEER_URLS, L1_TOKEN_NODE_URLS, POINTS_API_URL, isFiatCurrency } from "@gleam/core";
+import { mergeDiscoveredPeers, readDismissedPeers, readExtraPeerUrls } from "../peers";
 import type {
   ActivityEntry,
   ActivityPage,
@@ -302,9 +305,37 @@ export class ReadsHandler {
     private readonly discover: (options: DiscoverTokensOptions) => Promise<TokenMetadata[]> = discoverTokens,
   ) {}
 
+  /**
+   * The stored settings with the community and discovered peers the user
+   * hasn't removed appended. They're merged on every read, never written
+   * back, so the stored settings stay exactly as the user saved them.
+   */
   async loadNetworkSettings(): Promise<NetworkSettings> {
+    return mergeDiscoveredPeers(
+      await this.loadStoredNetworkSettings(),
+      await readExtraPeerUrls(this.storage),
+      await readDismissedPeers(this.storage),
+    );
+  }
+
+  private async loadStoredNetworkSettings(): Promise<NetworkSettings> {
     const raw = await this.storage.get<unknown>(NETWORK_SETTINGS_KEY);
     return isValidNetworkSettings(raw) ? raw : DEFAULT_NETWORK_SETTINGS;
+  }
+
+  /**
+   * A token balance, failing over to the other enabled peers when the
+   * active one is down. An L1 token reads the peer only as a last resort
+   * after the gateway and L1 nodes, so it gets one pass.
+   */
+  private readBalance(
+    settings: NetworkSettings,
+    options: Omit<ReadTokenBalanceOptions, "gatewayUrl" | "peerUrl">,
+  ): Promise<string> {
+    const peers = peerFailoverOrder(settings);
+    const read = (peerUrl: string | null) => readTokenBalance({ ...options, gatewayUrl: settings.gatewayUrl, peerUrl });
+    if (peers.length === 0 || options.transport === "l1") return read(settings.activePeerUrl);
+    return withPeerFailover(peers, read);
   }
 
   /**
@@ -353,11 +384,9 @@ export class ReadsHandler {
         if (settings.activePeerUrl === null) {
           throw new Error(userErrorMessage("noPeerConfigured"));
         }
-        const collectibles = await discoverCollectibles({
-          address: req.address,
-          gatewayUrl: settings.gatewayUrl,
-          peerUrl: settings.activePeerUrl,
-        });
+        const collectibles = await withPeerFailover(peerFailoverOrder(settings), (peerUrl) =>
+          discoverCollectibles({ address: req.address, gatewayUrl: settings.gatewayUrl, peerUrl }),
+        );
         await this.storage.set<CollectiblesCache>(key, { savedAt: Date.now(), collectibles });
         return collectibles;
       } catch (error) {
@@ -488,12 +517,10 @@ export class ReadsHandler {
     }
     const identity = tokenIdentity(address, metadata, source, settings.gatewayUrl);
     try {
-      const quantity = await readTokenBalance({
+      const quantity = await this.readBalance(settings, {
         processId,
         address,
         transport: metadata.transport,
-        gatewayUrl: settings.gatewayUrl,
-        peerUrl: settings.activePeerUrl,
         label: identity.ticker === processId ? "token" : identity.ticker,
       });
       if (metadata.denomination === null) {
@@ -779,12 +806,10 @@ export class ReadsHandler {
   async tokenBalance(req: { address: string } & TokenBalanceRequest): Promise<TokenBalanceResult> {
     const settings = await this.loadNetworkSettings();
     const metadata = await this.loadTokenMetadata(req.id, settings);
-    return readTokenBalance({
+    return this.readBalance(settings, {
       processId: req.id,
       address: req.address,
       transport: metadata.transport,
-      gatewayUrl: settings.gatewayUrl,
-      peerUrl: settings.activePeerUrl,
       label: metadata.ticker ?? "token",
     });
   }
@@ -1093,12 +1118,10 @@ export class ReadsHandler {
       const aoQuantities = await Promise.all(
         addresses.map(async (address) => {
           try {
-            const quantity = await readTokenBalance({
+            const quantity = await this.readBalance(settings, {
               processId: DEFAULT_AO_PROCESS_ID,
               address,
               transport: "mu",
-              gatewayUrl: settings.gatewayUrl,
-              peerUrl: settings.activePeerUrl,
             });
             return Number(quantity) / 10 ** (AO_TOKEN_METADATA.denomination ?? 12);
           } catch {
