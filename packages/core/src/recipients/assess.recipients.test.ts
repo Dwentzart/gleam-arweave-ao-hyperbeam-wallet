@@ -59,9 +59,14 @@ describe("assessRecipient", () => {
     expect(assessRecipient(FRIEND, [entry({})], [])).toEqual({ firstTime: false, lookalikeOf: null });
   });
 
-  it("is quiet for an address the wallet has received from", () => {
+  it("stays first time for an address the wallet has only received from", () => {
     const history = [entry({ type: "receive" })];
-    expect(assessRecipient(FRIEND, history, [])).toEqual({ firstTime: false, lookalikeOf: null });
+    expect(assessRecipient(FRIEND, history, [])).toEqual({ firstTime: true, lookalikeOf: null });
+  });
+
+  it("stays first time for a stranger that dusted the wallet, so one receive cannot vouch for it", () => {
+    const history = [entry({ txId: "dust", type: "receive", address: STRANGER, timestamp: 200 })];
+    expect(assessRecipient(STRANGER, history, [])).toEqual({ firstTime: true, lookalikeOf: null });
   });
 
   it("is quiet for a saved contact or own wallet with no history", () => {
@@ -76,9 +81,9 @@ describe("assessRecipient", () => {
     expect(assessRecipient(POISON, [], [FRIEND])).toEqual({ firstTime: true, lookalikeOf: FRIEND });
   });
 
-  it("flags a dust sender that resembles a past recipient even though it is in history", () => {
+  it("flags a dust sender that resembles a past recipient, and keeps it first time", () => {
     const history = [entry({}), entry({ txId: "dust", type: "receive", address: POISON, timestamp: 200 })];
-    expect(assessRecipient(POISON, history, [])).toEqual({ firstTime: false, lookalikeOf: FRIEND });
+    expect(assessRecipient(POISON, history, [])).toEqual({ firstTime: true, lookalikeOf: FRIEND });
   });
 
   it("does not treat a received-only address as a reference", () => {
