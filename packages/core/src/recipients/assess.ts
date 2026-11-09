@@ -66,6 +66,9 @@ export function assessRecipient(
   }
 
   const lookalikeOf = references.find((address) => isLookalike(recipient, address)) ?? null;
-  const seen = history.some((entry) => entry.address === recipient);
-  return { firstTime: !seen, lookalikeOf };
+  // Anything left is not a contact, not one of the user's wallets and was never
+  // sent to, so it stays first time even when the history holds it: any site can
+  // dust the wallet a minute before it asks for a payment, and the receive would
+  // otherwise silence the warning for a brand-new, unremarkable address.
+  return { firstTime: true, lookalikeOf };
 }
